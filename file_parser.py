@@ -2,7 +2,7 @@
 from os import walk, listdir, mkdir
 from os.path import isfile, join, exists, basename
 import pandas as pd
-from functions_lvd import *
+from functions_load import *
 import datetime as dt
 import tkinter
 from tkinter import messagebox
@@ -13,8 +13,6 @@ from paths import *
 # hide main window
 root = tkinter.Tk()
 root.withdraw()
-
-
 
 
 # Parse aux files
