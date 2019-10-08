@@ -6,7 +6,7 @@ from os import listdir
 from functions_misc import multifolder
 
 
-# load the target folders
+# load the target folders (select the experiment folders containing the files
 file_path = multifolder(master_path)
 
 # for all the selected files
