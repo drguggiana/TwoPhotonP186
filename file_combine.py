@@ -206,7 +206,7 @@ for folders in folders_path:
                 tar_name = stimprot_ids[0, np.uint16(stimprot_ids[1, :]) == protocols][0]
                 
                 if tar_name == 'DG':
-
+                    print('DG')
                     # fill in the particular stimulus [might have to use a switch, since
                     # the names of the fields can vary depending on the stimulus. For
                     # now I'll leave it as just seq_directions]
@@ -228,11 +228,32 @@ for folders in folders_path:
                     trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['poststim_time'][0][0][0][0]
                 elif tar_name == 'RFM':
                     print('RFM')
-                    # trial_info = []
+                    # get the stimulus numbers in a unique sequence,
+                    # combining all the conditions
+                    unique_seq = stim_data[tar_name]['stimseq'][0][0]
+                    trial_info[trial_info[:, 0] == protocols, 1] = unique_seq.flatten()
+                    # load the rep for each trial
+                    rep_num = stim_data[tar_name]['n_reps'][0][0][0][0]
+                    stim_num = unique_seq.shape[1]
+                    rep_idx = np.array([np.arange(rep_num) for el in range(stim_num)]).T
+                    trial_info[trial_info[:, 0] == protocols, 2] = rep_idx.flatten()
+                    # load the post-stim interval
+                    trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['interpatch_time'][0][0][0][0]
                 elif tar_name == 'LO':
                     # TODO: implement from older code
-                    # trial_info = []
                     print('LO')
+                    # get the stimulus numbers in a unique sequence,
+                    # combining all the conditions
+                    tmp = stim_data[tar_name]['paramorder'][0][0]
+                    unique_seq = np.ravel_multi_index(np.array([tmp[:, :, 1]-1, tmp[:, :, 0]-1]), (np.unique(tmp[0, :, 1]).shape[0], np.unique(tmp[0, :, 0]).shape[0])) + 1
+                    trial_info[trial_info[:, 0] == protocols, 1] = unique_seq.flatten()
+                    # load the rep for each trial
+                    rep_num = stim_data[tar_name]['n_reps'][0][0][0][0]
+                    stim_num = np.unique(tmp[0, :, 0]).shape[0]*np.unique(tmp[0, :, 1]).shape[0]
+                    rep_idx = np.array([np.arange(rep_num) for el in range(stim_num)]).T
+                    trial_info[trial_info[:, 0] == protocols, 2] = rep_idx.flatten()
+                    # load the post-stim interval
+                    trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['poststim_time'][0][0][0][0]
                 else:
                     # trial_info = []
                     print('something else')
@@ -288,6 +309,22 @@ for folders in folders_path:
 
         # generate the index vector for each frame
         idx_vec = np.digitize(np.arange(lvd_data.shape[0]), edge_vector)
+        # TODO: find a file with this messed up to try the section
+        # check for gaps in the idx vector. if any, interpolate
+        gap_list = np.argwhere(np.diff(idx_vec) > 1)+1
+        
+        if gap_list.shape[0] > 0:
+            while gap_list.shape[0] > 0:
+                nanc = gap_list[0]
+                # add an extra value in the index vector and the data vector
+                # [via interpolation]
+                idx_vec = np.hstack((idx_vec[:nanc], idx_vec[nanc-1]+1, idx_vec[nanc:]))
+                # generate the interpolated data point
+                interp_point = interp_trace(np.arange(1, 3), lvd_data[nanc-1:nanc+1, :], 1.5)
+
+                lvd_data = np.hstack((lvd_data[:nanc, :], interp_point, lvd_data[nanc:, :]))
+                # refind the gaps
+                gap_list = np.argwhere(np.diff(idx_vec) > 1)+1
 
         # if visual stimulation, get the periods with stimulation from the
         # lvd file
@@ -377,7 +414,7 @@ for folders in folders_path:
         last_nan1 = np.argwhere(np.diff(np.isnan(nan_idx_eye1vec)))
         if last_nan1.size > 0:
             last_nan1 = last_nan1[-1]
-
+        # TODO: find file with this messed up and test the segment
         if inner_nan1.size > 0:
             while inner_nan1.size > 0:
                 nanc = inner_nan1[0]
@@ -495,9 +532,6 @@ for folders in folders_path:
                 stim_start = np.hstack((stim_start, np.zeros((trial_num-stim_start.shape[0]))))
                 stim_end = np.hstack((stim_end, np.zeros((trial_num-stim_end.shape[0]))))
 
-        # determine the number of frames to take for R0
-        r0_frames = np.ceil(sample_rate*r0_time).astype(np.uint16)
-
         # determine the number of cells in the experiment
         cell_num = R_detrend.shape[0]
 
@@ -522,8 +556,28 @@ for folders in folders_path:
                 prot_start = stim_start[trial_info[:, 0] == sorted_protocols[protocols]]
                 prot_end = stim_end[trial_info[:, 0] == sorted_protocols[protocols]]
 
-                # get the min trial duration plus the r0 frames
-                trial_duration = (r0_frames + np.min(prot_end-prot_start)).astype(np.uint16)
+                # determine the number of frames to take for R0
+                r0_time = dRoR[prot_name]['trial_info'][0, 3]
+                r0_frames = np.ceil(sample_rate * r0_time).astype(np.uint16)
+
+                # # get the min trial duration plus the r0 frames
+                # trial_duration = (r0_frames + np.min(prot_end-prot_start)).astype(np.uint16)
+                
+                # define the vector of trial durations [including the r0
+                # time] and accounting for the indexing difference
+                trial_vec = (r0_frames + (prot_end-prot_start)).astype(np.uint16)
+                if prot_name == 'LO':
+                    # get the max trial duration plus the r0 frames
+                    trial_duration = np.max(trial_vec).astype(np.uint16)
+                elif prot_name == 'RFM':
+                    # get the min trial duration plus the r0 frames at
+                    # beginning and end
+                    trial_duration = np.min(trial_vec) + r0_frames
+                    trial_vec = (np.ones(subtrial_num)*trial_duration).astype(np.uint16)
+                else:
+                    # get the min trial duration plus the r0 frames
+                    trial_duration = np.min(trial_vec)
+                    trial_vec = (np.ones(subtrial_num)*trial_duration).astype(np.uint16)
 
                 # load the rep for each trial
                 rep_num = np.unique(dRoR[prot_name]['trial_info'][:, 2]).shape[0]
@@ -555,10 +609,11 @@ for folders in folders_path:
                         trial_start = trial_start.astype(np.uint16)
                         # transfer the dRoR info
                         # load the trial in the matrix, including the r0 period
-                        trial_mat[:, :, reps, stim] = \
-                            R_detrend[:, np.arange(trial_start, trial_start + trial_duration)]
+                        trial_mat[:, :trial_vec[trials], reps, stim] = \
+                            R_detrend[:, np.arange(trial_start, trial_start + trial_vec[trials])]
                         # get the corresponding cam info
-                        trial_cam[:, reps, stim, :] = cam_data[np.arange(trial_start, trial_start + trial_duration), :]
+                        trial_cam[:trial_vec[trials], reps, stim, :] = \
+                            cam_data[np.arange(trial_start, trial_start + trial_vec[trials]), :]
 
                 # calculate dRoR and store the main structure
                 R0 = np.reshape(np.median(trial_mat[:, :r0_frames, :, :], axis=1), (cell_num, 1, rep_num, stim_num))
