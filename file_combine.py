@@ -15,10 +15,7 @@ folders_path = multifolder(master_path)
 # define the frame averaging used
 # TODO: get frame averaging automatically
 frame_averaging = 2
-
-# get the R0 time in [s]
-# TODO: get r0 automatically
-r0_time = 3
+# TODO: add progress bar
 
 # define the type of experiment, stage or not
 # TODO: get the experiment type automatically
@@ -26,6 +23,7 @@ experiment_type = 0
 
 # for all the folders
 for folders in folders_path:
+    print('Loading the calcium data')
     # get the number of individual experiments combined in the folder (i.e. right and left eye)
     exp_string = basename(folders).split('_')
     exp_num = len(exp_string)
@@ -56,7 +54,8 @@ for folders in folders_path:
     frame_counter = 0
     # for all the experiments in this folder
     for index, experiments in enumerate(range(exp_num)):
-
+        print('Processing file: ' + str(index))
+        print('Load lvd and eye files')
         # load the im_frames for this experiment
         im_frames = im_frames_all[index]
 
@@ -86,6 +85,7 @@ for folders in folders_path:
             _, eye2_data = load_eye_monitor_data(eye2_file, file_type='old_eye2')
         else:
             _, eye2_data = load_eye_monitor_data(eye2_file, file_type='new_eye2')
+
         # get the frame times
         iframe1_times, _ = get_iframe_times(eye1_data, lvd_data[:, 3])
         iframe2_times, _ = get_iframe_times(eye2_data, lvd_data[:, 3])
@@ -94,7 +94,8 @@ for folders in folders_path:
         if experiment_type == 1:
             # get the file path
             prot_file = [join(single_path, el) for el in listdir(single_path) if el.endswith('.txt')][0]
-        
+
+        print('Extract imaging frame times from the lvd data')
         # trim the trace
         # scale the galvo trace to +/- 1
         lvd_data[:, 2] = lvd_data[:, 2]/np.max(lvd_data[:, 2])
@@ -166,7 +167,7 @@ for folders in folders_path:
         sample_rate = 1/med_frame_time
         # process the stim file if it is a vis protocol
         if experiment_type == 0:
-  
+            print('Processing the stimulus file')
             # get the path to the stim file
             stim_file = [join(single_path, el) for el in listdir(single_path) if el.endswith('.mat')][0]
             # load the file contents
@@ -240,7 +241,6 @@ for folders in folders_path:
                     # load the post-stim interval
                     trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['interpatch_time'][0][0][0][0]
                 elif tar_name == 'LO':
-                    # TODO: implement from older code
                     print('LO')
                     # get the stimulus numbers in a unique sequence,
                     # combining all the conditions
@@ -262,7 +262,8 @@ for folders in folders_path:
         trial_info = trial_info.astype(np.uint16)
         # get the total number of trials
         trial_num = trial_info.shape[0]
-        # process the Ca traces down to de-trended ROIs
+
+        print('Process the Ca traces down to de-trended ROIs')
         # design the filter to low pass the data [based on the sampling rate
         # nyquist sampling rate
         nyq_rate = sample_rate/2.0
@@ -298,7 +299,7 @@ for folders in folders_path:
         # perform the detrending
         R_detrend = R_t - rolling_window(R_t, np.round(sample_rate*window_time).astype(int), np.percentile, 8,
                                          axis=1)
-        # align each frame with the lvd info
+        print('Align each frame with the lvd info')
         # get a trace of lvd_data binned [via mode] to match the imaging frames
         # generate the label vector to bin the frame times according to the
         # frame averaging
@@ -336,7 +337,7 @@ for folders in folders_path:
             stim_perframe = np.array(dac_time.groupby('label').agg(lambda x: pd.Series.mode(x)[0]))
             # stim_perframe = splitapply[@mode,lvd_data[1,:],idx_vec]
 
-        # align each frame with the eye cam info
+        print('Align each frame with the eye cam info')
         # label the eye data frames with the corresponding microscope frame
         idx_eye1vec = np.digitize(iframe1_times, edge_vector)
         idx_eye2vec = np.digitize(iframe2_times, edge_vector)
@@ -484,7 +485,6 @@ for folders in folders_path:
         if cam_data.shape[0] > im_frames:
             cam_data = cam_data[:im_frames, :]
 
-        # calculate dRoR
         print('Calculate dRoR')
         # TODO: add the stage version
         # get the stim starts
@@ -620,7 +620,7 @@ for folders in folders_path:
                 dRoR[prot_name]['data'] = (trial_mat - R0)/R0
                 # save the camera data
                 dRoR[prot_name]['camData'] = trial_cam
-
+        print('Save data')
         # assemble the dictionary with metadata, including ROIs
         meta_data = {'caData': {}, 'frameAve': frame_averaging, 'camTypes': [cam1_type, cam2_type]}
         meta_data['caData']['ops'] = ops
@@ -628,7 +628,6 @@ for folders in folders_path:
         meta_data['caData']['stat'] = sp[iscell[:, 0] == 1, :]
         meta_data['caData']['filename'] = ca_file
 
-        # can't go on hdf5
         if experiment_type == 0:
             meta_data['stimData'] = stim_data
 

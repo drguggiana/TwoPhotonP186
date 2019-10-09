@@ -6,4 +6,8 @@ contents = np.load(file, allow_pickle=True)
 data = contents['data'].item()
 metadata = contents['metadata'].item()
 
+# analyze the DG info
+DG_data = data['DG']
+
+
 print('yay')
