@@ -258,8 +258,8 @@ for folders in folders_path:
                     # trial_info = []
                     print('something else')
 
-        # turn trial info into integers
-        trial_info = trial_info.astype(np.uint16)
+        # # turn trial info into integers
+        # trial_info = trial_info.astype(np.uint16)
         # get the total number of trials
         trial_num = trial_info.shape[0]
 
@@ -594,7 +594,7 @@ for folders in folders_path:
                 # for each trial
                 for trials in np.arange(subtrial_num):
                     # get the current rep
-                    reps = dRoR[prot_name]['trial_info'][trials, 2]
+                    reps = dRoR[prot_name]['trial_info'][trials, 2].astype(np.uint16)
                     # get the current stim
                     stim = stim_idx[trials]
                     # determine the trial start
