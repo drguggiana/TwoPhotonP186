@@ -30,7 +30,7 @@ for folders in file_path:
         # update file_size to the current position in the file
         file_size -= g.tell()
         # get the number of frames
-        nbr_frames = np.round(file_size/(x_res*y_res*2)).astype('int16')
+        nbr_frames = np.round(file_size/(x_res*y_res*2)).astype('int32')
         # set the position of the red file also at the beginning of the frame
         r.seek(4, 0)
         # create the hdf5 dataset
