@@ -2,6 +2,7 @@ import numpy as np
 from paths import master_path
 from functions_misc import multifolder, get_iframe_times, rolling_window, interp_trace
 from functions_load import load_lvd, load_eye_monitor_data
+from functions_2pPlot import plot_2pdataset
 from os.path import basename, join, dirname
 from os import listdir
 from scipy.io import loadmat
@@ -10,6 +11,7 @@ import pandas as pd
 
 
 # select the target folders
+# TODO: allow multiple folder selection across folders
 folders_path = multifolder(master_path)
 
 # define the frame averaging used
@@ -636,6 +638,12 @@ for folders in folders_path:
         # savefile.create_dataset('data', data=dRoR)
         # savefile.create_dataset('metadata', data=meta_data)
         np.savez(save_path, data=dRoR, metadata=meta_data)
+
+        # plot the data and save the figure
+        fig_list = plot_2pdataset(dRoR)
+
+        for fig, name in zip(fig_list, dRoR.keys()):
+            fig.savefig(join(single_path, 'traces_' + name + '.png'), bbox_inches='tight')
 
         # update the frame counter
         frame_counter += im_frames
