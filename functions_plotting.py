@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 
 
-def plot_image(data_in, rows=1, columns=1, fig=None, colormap=None, colorbar=None):
+def plot_image(data_in, rows=1, columns=1, fig=None, colormap=None, colorbar=None, ylabel=None, title=None):
     """Wrapper for the imshow function in subplots"""
     # create a new figure window
     if fig is None:
@@ -22,7 +22,10 @@ def plot_image(data_in, rows=1, columns=1, fig=None, colormap=None, colorbar=Non
             # plot the data
             im = ax[row, col].imshow(lines, interpolation='nearest', cmap=colormap)
             ax[row, col].set_xlabel('Time')
-            ax[row, col].set_ylabel('Trials')
+            if ylabel is not None:
+                ax[row, col].set_ylabel(ylabel)
+            if title is not None:
+                ax[row, col].set_title(title)
             # if there are colorbars, use them
             if colorbar is not None:
                 cbar = fig.colorbar(im, ax=ax[row, col], shrink=0.5)
