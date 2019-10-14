@@ -1,6 +1,6 @@
 import numpy as np
 from paths import master_path
-from functions_misc import multifolder, get_iframe_times, rolling_window, interp_trace, sub2ind
+from functions_misc import multifolder, get_iframe_times, rolling_window, interp_trace, sub2ind, interp_trace_multid
 from functions_load import load_lvd, load_eye_monitor_data
 from functions_2pPlot import plot_2pdataset
 from os.path import basename, join, dirname
@@ -16,7 +16,7 @@ folders_path = multifolder(master_path)
 
 # define the frame averaging used
 # TODO: get frame averaging automatically
-frame_averaging = 2
+frame_averaging = 1
 # TODO: add progress bar
 
 # define the type of experiment, stage or not
@@ -309,8 +309,12 @@ for folders in folders_path:
         # get a trace of lvd_data binned [via mode] to match the imaging frames
         # generate the label vector to bin the frame times according to the
         # frame averaging
-        label_vec = pd.DataFrame(data=np.vstack((np.repeat(np.arange(frame_intervals.shape[0]/2).astype(np.uint16),
-                                 frame_averaging), frame_intervals)).T, columns=['label', 'times'])
+        label_vec = pd.DataFrame(data=
+                                 np.vstack(
+                                     (np.repeat(np.arange(frame_intervals.shape[0]/frame_averaging).astype(np.uint16),
+                                        frame_averaging),
+                                      frame_intervals)).T,
+                                 columns=['label', 'times'])
         # calculate the edges of each frame in time
         edge_vector = np.hstack((0, np.cumsum(np.array(label_vec.groupby('label').sum()))))
 
@@ -427,7 +431,10 @@ for folders in folders_path:
         last_nan1 = np.argwhere(np.diff(np.isnan(nan_idx_eye1vec)))
         if last_nan1.size > 0:
             last_nan1 = last_nan1[-1]
+        else:
+            last_nan1 = -1
         # TODO: find file with this messed up and test the segment
+        # mostly fixed, needs to be validated on another data set or two - MM 14.10.19
         if inner_nan1.size > 0:
             while inner_nan1.size > 0:
                 nanc = inner_nan1[0][0]
@@ -436,9 +443,10 @@ for folders in folders_path:
                 nan_idx_eye1vec = np.hstack((nan_idx_eye1vec[:nanc],
                                             nan_idx_eye1vec[nanc-1]+1, nan_idx_eye1vec[nanc:]))
                 # generate the interpolated data point
-                interp_point = interp_trace(np.arange(1, 3), nan_eye1_cols[:, nanc-1:nanc+1], 1.5)
+                interp_point = interp_trace_multid(np.arange(1, 3), nan_eye1_cols[:, nanc-1:nanc+1], 1.5)
                 nan_eye1_cols = np.hstack((nan_eye1_cols[:, :nanc],
-                                          interp_point, nan_eye1_cols[:, nanc:]))
+                                           np.expand_dims(interp_point, axis=1),
+                                           nan_eye1_cols[:, nanc:]))
 
                 delta_cam1frame = np.diff(nan_idx_eye1vec) > 1
 
@@ -447,8 +455,10 @@ for folders in folders_path:
 
         # find where the continuous NaNs begin at the end
         last_nan2 = np.argwhere(np.diff(np.isnan(nan_idx_eye2vec)))
-        if last_nan1.size > 0:
-            last_nan1 = last_nan1[-1]
+        if last_nan2.size > 0:
+            last_nan2 = last_nan2[-1]
+        else:
+            last_nan2 = -1
 
         if inner_nan2.size > 0:
             while inner_nan2.size > 0:
@@ -458,11 +468,12 @@ for folders in folders_path:
                 nan_idx_eye2vec = np.hstack((nan_idx_eye2vec[:nanc],
                                             nan_idx_eye2vec[nanc-1]+1, nan_idx_eye2vec[nanc:]))
                 # generate the interpolated data point
-                interp_point = interp_trace(np.arange(1, 3), nan_eye2_cols[:, nanc-1:nanc+1], 1.5)
+                interp_point = interp_trace_multid(np.arange(1, 3), nan_eye2_cols[:, nanc-1:nanc+1], 1.5)
                 nan_eye2_cols = np.hstack((nan_eye2_cols[:, :nanc],
-                                          interp_point, nan_eye2_cols[:, nanc:]))
+                                           np.expand_dims(interp_point, axis=1),
+                                           nan_eye2_cols[:, nanc:]))
 
-                delta_cam2frame = np.diff[nan_idx_eye2vec] > 1
+                delta_cam2frame = np.diff(nan_idx_eye2vec) > 1
                 # consider the entire trace if doing a stage experiment
                 if experiment_type == 0:
                     inner_nan2 = np.argwhere(delta_cam2frame[99:-100])+100
@@ -478,7 +489,7 @@ for folders in folders_path:
         nan_idx_eye1vec[np.hstack((0, delta_cam1frame)) == 1] = np.nan
         nan_idx_eye2vec[np.hstack((0, delta_cam2frame)) == 1] = np.nan
         # trim the traces to contain the same number of scope frames
-        min_frames = np.min([np.max(nan_idx_eye1vec), np.max(nan_idx_eye2vec)])
+        min_frames = np.min([np.nanmax(nan_idx_eye1vec), np.nanmax(nan_idx_eye2vec)])
         nan_idx_eye1vec[nan_idx_eye1vec > min_frames] = np.nan
         nan_idx_eye2vec[nan_idx_eye2vec > min_frames] = np.nan
 
@@ -632,6 +643,8 @@ for folders in folders_path:
                 dRoR[prot_name]['data'] = (trial_mat - R0)/R0
                 # save the camera data
                 dRoR[prot_name]['camData'] = trial_cam
+                # save the ball data
+                dRoR[prot_name]['ballData'] = lvd_data[:, 1]
         print('Save data')
         # assemble the dictionary with metadata, including ROIs
         meta_data = {'caData': {}, 'frameAve': frame_averaging, 'camTypes': [cam1_type, cam2_type]}

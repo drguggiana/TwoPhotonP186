@@ -178,12 +178,11 @@ def interp_trace_multid(x_known, y_known, x_target):
     # filter the values so the interpolant is trained only on sorted x points (required by the function)
     sorted_frames = np.hstack((True, np.invert(x_known[1:] <= x_known[:-1])))
     x_known = x_known[sorted_frames]
-    y_known = y_known[sorted_frames, :]
+    y_known = y_known[:, sorted_frames]
     # also remove any NaN frames
-    notnan = ~np.isnan(np.sum(y_known, axis=1))
+    notnan = ~np.isnan(np.sum(y_known, axis=0))
     x_known = x_known[notnan]
-    y_known = y_known[notnan, :].T
+    y_known = y_known[:, notnan]
     # create the interpolant
     interpolant = interp1d(x_known, y_known, kind='linear', bounds_error=False, fill_value=np.nanmean(y_known, axis=1))
     return interpolant(x_target).T
->>>>>>> a3c5f73f127118b7e1e773d98deabc42ddc4129d
