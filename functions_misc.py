@@ -128,13 +128,13 @@ def interp_trace(x_known, y_known, x_target):
     # filter the values so the interpolant is trained only on sorted x points (required by the function)
     sorted_frames = np.hstack((True, np.invert(x_known[1:] <= x_known[:-1])))
     x_known = x_known[sorted_frames]
-    y_known = y_known[sorted_frames]
+    y_known = y_known[:, sorted_frames]
     # also remove any NaN frames
     notnan = ~np.isnan(y_known)
-    x_known = x_known[notnan]
+    # x_known = x_known[notnan]
     y_known = y_known[notnan]
     # create the interpolant
-    interpolant = interp1d(x_known, y_known, kind='cubic', bounds_error=False, fill_value=np.mean(y_known))
+    interpolant = interp1d(x_known, y_known, kind='linear', bounds_error=False, fill_value=np.mean(y_known))
     return interpolant(x_target)
 
 
@@ -153,3 +153,22 @@ def normalize_matrix(matrix, target=None, axis=None):
         out_matrix = (matrix - np.nanmin(matrix, axis=axis).reshape(-1, 1)) / (
                     np.nanmax(matrix, axis=axis).reshape(-1, 1) - np.nanmin(matrix, axis=axis).reshape(-1, 1))
     return out_matrix
+
+
+def sub2ind(matrix):
+
+    # Convert to zero indexing for Python
+    matrix = matrix - 1
+
+    # Reshape so that the matrix has the color as the principle feature
+    # This is generalized for n parameters
+    tmp = [matrix[:, :, i] for i in range(1, matrix.shape[-1])]
+    tmp.append(matrix[:, :, 0])
+    new_mat = np.array(tmp)
+
+    # Get the number of unique conditions for each stimulus parameter
+    dims = tuple([len(np.unique(new_mat[i])) for i in range(new_mat.shape[0])])
+    indices = np.ravel_multi_index(new_mat, dims)
+
+    # Convert back to matlab indexing
+    return indices + 1

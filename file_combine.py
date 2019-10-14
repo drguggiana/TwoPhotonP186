@@ -1,6 +1,6 @@
 import numpy as np
 from paths import master_path
-from functions_misc import multifolder, get_iframe_times, rolling_window, interp_trace
+from functions_misc import multifolder, get_iframe_times, rolling_window, interp_trace, sub2ind
 from functions_load import load_lvd, load_eye_monitor_data
 from functions_2pPlot import plot_2pdataset
 from os.path import basename, join, dirname
@@ -51,7 +51,10 @@ for folders in folders_path:
     # get the neuropil coefficient used
     neurop_coeff = ops['neucoeff']
     # get the number of image frames
-    im_frames_all = ops['nframes_per_folder']
+    if ops.get('nframes_per_folder') is None:
+        im_frames_all = np.array([ops['nframes']])
+    else:
+        im_frames_all = ops['nframes_per_folder']
     # initialize a frame counter
     frame_counter = 0
     # for all the experiments in this folder
@@ -140,7 +143,7 @@ for folders in folders_path:
         # trim this vector from the end to match the number of imaging frames
         frame_vector = np.hstack((trough_vector, peak_vector))
         frame_vector = frame_vector[:, -num_scans_im+1:]
-        
+
         # based on the position of the stimuli, determine whether the file
         # might've been cut at the beginning or the end
         # find the delta between the trigger and the last stim start. if
@@ -150,7 +153,7 @@ for folders in folders_path:
         # also find out if the first stimulus starts before the first frame
         first_stim = np.argwhere(np.diff(lvd_data[:, 0]) > 2)[0]
         if (trigger_off-last_stim) > 100:
-            cut_flag = 2  
+            cut_flag = 2
         elif first_stim < frame_vector[1, 1]:
             cut_flag = 1
         else:
@@ -244,14 +247,15 @@ for folders in folders_path:
                     trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['interpatch_time'][0][0][0][0]
                 elif tar_name == 'LO':
                     print('LO')
-                    # get the stimulus numbers in a unique sequence,
+                    # get the stimulus numbers in a unique sequen&ce,
                     # combining all the conditions
                     tmp = stim_data[tar_name]['paramorder'][0][0]
-                    unique_seq = np.ravel_multi_index(np.array([tmp[:, :, 1]-1, tmp[:, :, 0]-1]), (np.unique(tmp[0, :, 1]).shape[0], np.unique(tmp[0, :, 0]).shape[0])) + 1
+                    unique_seq = sub2ind(tmp)
                     trial_info[trial_info[:, 0] == protocols, 1] = unique_seq.flatten()
                     # load the rep for each trial
                     rep_num = stim_data[tar_name]['n_reps'][0][0][0][0]
-                    stim_num = np.unique(tmp[0, :, 0]).shape[0]*np.unique(tmp[0, :, 1]).shape[0]
+                    stim_num = np.unique(tmp[0, :, :], axis=0).shape[0]
+                    # stim_num = np.unique(tmp[0, :, 0]).shape[0]*np.unique(tmp[0, :, 1]).shape[0]
                     rep_idx = np.array([np.arange(rep_num) for el in range(stim_num)]).T
                     trial_info[trial_info[:, 0] == protocols, 2] = rep_idx.flatten()
                     # load the post-stim interval
@@ -368,14 +372,20 @@ for folders in folders_path:
         if np.max(idx_eye1vec) < im_frames:
             max_idx = np.argmax(idx_eye1vec)
             idx_eye1vec = np.hstack((idx_eye1vec[:max_idx], im_frames, idx_eye1vec[max_idx+1]))
-            eye1_cols = np.hstack((eye1_cols[:, :max_idx], eye1_cols[:, max_idx], eye1_cols[:, max_idx+1]))
+            eye1_cols = np.hstack((eye1_cols[:, :max_idx],
+                                   np.expand_dims(eye1_cols[:, max_idx], axis=1),
+                                   np.expand_dims(eye1_cols[:, max_idx+1], axis=1)
+                                   ))
         # # NaN the values from the points after the last frame
         # elif np.max(idx_eye1vec) > im_frames:
         #     idx_eye1vec[idx_eye1vec > im_frames] = np.nan
         if np.max(idx_eye2vec) < im_frames:
             max_idx = np.argmax(idx_eye2vec)
             idx_eye2vec = np.hstack((idx_eye2vec[:max_idx], im_frames, idx_eye2vec[max_idx+1]))
-            eye2_cols = np.hstack((eye2_cols[:, :max_idx], eye2_cols[:, max_idx], eye2_cols[:, max_idx+1]))
+            eye2_cols = np.hstack((eye2_cols[:, :max_idx],
+                                   np.expand_dims(eye2_cols[:, max_idx], axis=1),
+                                   np.expand_dims(eye2_cols[:, max_idx+1], axis=1)
+                                   ))
         # # NaN the values from the points after the last frame
         # elif np.max(idx_eye2vec) > im_frames:
         #     idx_eye2vec[idx_eye2vec > im_frames] = np.nan
@@ -420,7 +430,7 @@ for folders in folders_path:
         # TODO: find file with this messed up and test the segment
         if inner_nan1.size > 0:
             while inner_nan1.size > 0:
-                nanc = inner_nan1[0]
+                nanc = inner_nan1[0][0]
                 # add an extra value in the index vector and the data vector
                 # [via interpolation]
                 nan_idx_eye1vec = np.hstack((nan_idx_eye1vec[:nanc],
@@ -442,7 +452,7 @@ for folders in folders_path:
 
         if inner_nan2.size > 0:
             while inner_nan2.size > 0:
-                nanc = inner_nan2[0]
+                nanc = inner_nan2[0][0]
                 # add an extra value in the index vector and the data vector
                 # [via interpolation]
                 nan_idx_eye2vec = np.hstack((nan_idx_eye2vec[:nanc],
