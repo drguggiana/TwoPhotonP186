@@ -156,7 +156,7 @@ def normalize_matrix(matrix, target=None, axis=None):
 
 
 def sub2ind(matrix):
-
+    """pythonized version of sub2ind from Matlab"""
     # Convert to zero indexing for Python
     matrix = matrix - 1
 
@@ -172,6 +172,7 @@ def sub2ind(matrix):
 
     # Convert back to matlab indexing
     return indices + 1
+
 
 def interp_trace_multid(x_known, y_known, x_target):
     """Interpolate a trace by building an interpolant"""
