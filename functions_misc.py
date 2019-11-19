@@ -128,13 +128,20 @@ def interp_trace(x_known, y_known, x_target):
     # filter the values so the interpolant is trained only on sorted x points (required by the function)
     sorted_frames = np.hstack((True, np.invert(x_known[1:] <= x_known[:-1])))
     x_known = x_known[sorted_frames]
-    y_known = y_known[:, sorted_frames]
+    y_known = y_known[sorted_frames, :]
     # also remove any NaN frames
     notnan = ~np.isnan(y_known)
-    x_known = x_known[notnan]
-    y_known = y_known[notnan]
+    notnan_rows = np.all(notnan, axis=1)    # For the x data
+    y_known = y_known[notnan].reshape(notnan.shape)    # To preserve shape
+    x_known = x_known[notnan_rows]
+
     # create the interpolant
-    interpolant = interp1d(x_known, y_known, kind='cubic', bounds_error=False, fill_value=np.mean(y_known))
+    # Possible issue: changed interpolant to linear, because value errors were given for a cubic interpolant
+    interpolant = interp1d(x_known, y_known,
+                           axis=0,
+                           kind='linear',
+                           bounds_error=False,
+                           fill_value=np.mean(y_known, axis=0))
     return interpolant(x_target)
 
 
@@ -156,7 +163,7 @@ def normalize_matrix(matrix, target=None, axis=None):
 
 
 def sub2ind(matrix):
-    """pythonized version of sub2ind from Matlab"""
+    """Get indices of every unique combination in a multidimensional matrix"""
     # Convert to zero indexing for Python
     matrix = matrix - 1
 
@@ -167,10 +174,10 @@ def sub2ind(matrix):
     new_mat = np.array(tmp)
 
     # Get the number of unique conditions for each stimulus parameter
-    dims = tuple([len(np.unique(new_mat[i])) for i in range(new_mat.shape[0])])
-    indices = np.ravel_multi_index(new_mat, dims)
+    dims = [len(np.unique(new_mat[i])) for i in range(new_mat.shape[0])]
+    indices = np.ravel_multi_index(new_mat, tuple(dims))
 
-    # Convert back to matlab indexing
+    # Convert back to matlab one-indexing
     return indices + 1
 
 

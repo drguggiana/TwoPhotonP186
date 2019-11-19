@@ -26,6 +26,7 @@ experiment_type = 0
 # for all the folders
 for folders in folders_path:
     print('Loading the calcium data')
+
     # get the number of individual experiments combined in the folder (i.e. right and left eye)
     exp_string = basename(folders).split('_')
     exp_num = len(exp_string)
@@ -52,7 +53,9 @@ for folders in folders_path:
     neurop_coeff = ops['neucoeff']
     # get the number of image frames
     if ops.get('nframes_per_folder') is None:
-        im_frames_all = np.array([ops['nframes']])
+        # Suite2p for Python does not create an "nframes_per_folder" variable,
+        # so we calculate how many frames per experiment there were
+        im_frames_all = np.ones(exp_num, dtype=int)*ops['nframes']
     else:
         im_frames_all = ops['nframes_per_folder']
     # initialize a frame counter
@@ -94,6 +97,7 @@ for folders in folders_path:
         # get the frame times
         iframe1_times, _ = get_iframe_times(eye1_data, lvd_data[:, 3])
         iframe2_times, _ = get_iframe_times(eye2_data, lvd_data[:, 3])
+
         # load the stage file if a stage protocol
         # TODO: implement if needed
         if experiment_type == 1:
@@ -165,7 +169,7 @@ for folders in folders_path:
 
         # get the frame intervals [gotta calculate from peak to peak]
     #      frame_intervals = diff[frame_vector,1,1]
-        frame_intervals = np.hstack((np.diff(frame_vector[:, 0]),  frame_vector[-1, 1]+1-frame_vector[-1, 0]))
+        frame_intervals = np.hstack((np.diff(frame_vector[:, 0]), frame_vector[-1, 1]+1-frame_vector[-1, 0]))
         # and the median frame time in s
         med_frame_time = np.median(frame_intervals)/scan_rate*frame_averaging
         # finally, get the median sample rate
@@ -225,13 +229,28 @@ for folders in folders_path:
                         trial_info[trial_info[:, 0] == protocols, 1] = stim_data[tar_name]['seqangles'][0][0].flatten()
 
                     # load the rep for each trial
-                    rep_num = stim_data[tar_name]['n_reps'][0][0][0][0]
-                    stim_num = stim_data[tar_name]['directions'][0][0][0][0]
+                    # rep_num = stim_data[tar_name]['n_reps'][0][0][0][0]
+                    # stim_num = stim_data[tar_name]['directions'][0][0][0][0]
+                    # sf_num = stim_data[tar_name]['spacfreq'][0][0][0].size
+                    #
+                    # rep_idx = np.array([np.arange(rep_num) for el in range(stim_num)]).T
+                    # trial_info[trial_info[:, 0] == protocols, 2] = rep_idx.flatten()
+                    # # load the post-stim interval
+                    # trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['poststim_time'][0][0][0][0]
 
+                    # Testing the protocol used for LO with the drifting gratings - MM 14 Oct 2019
+                    tmp = stim_data[tar_name]['paramorder'][0][0]
+                    unique_seq = sub2ind(tmp)
+                    trial_info[trial_info[:, 0] == protocols, 1] = unique_seq.flatten()
+                    # load the rep for each trial
+                    rep_num = stim_data[tar_name]['n_reps'][0][0][0][0]
+                    stim_num = np.unique(tmp[0, :, :], axis=0).shape[0]
+                    # stim_num = np.unique(tmp[0, :, 0]).shape[0]*np.unique(tmp[0, :, 1]).shape[0]
                     rep_idx = np.array([np.arange(rep_num) for el in range(stim_num)]).T
                     trial_info[trial_info[:, 0] == protocols, 2] = rep_idx.flatten()
                     # load the post-stim interval
                     trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['poststim_time'][0][0][0][0]
+
                 elif tar_name == 'RFM':
                     print('RFM')
                     # get the stimulus numbers in a unique sequence,
@@ -245,6 +264,7 @@ for folders in folders_path:
                     trial_info[trial_info[:, 0] == protocols, 2] = rep_idx.flatten()
                     # load the post-stim interval
                     trial_info[trial_info[:, 0] == protocols, 3] = stim_data[tar_name]['interpatch_time'][0][0][0][0]
+
                 elif tar_name == 'LO':
                     print('LO')
                     # get the stimulus numbers in a unique sequen&ce,
@@ -309,11 +329,17 @@ for folders in folders_path:
         # get a trace of lvd_data binned [via mode] to match the imaging frames
         # generate the label vector to bin the frame times according to the
         # frame averaging
-        label_vec = pd.DataFrame(data=
-                                 np.vstack(
-                                     (np.repeat(np.arange(frame_intervals.shape[0]/frame_averaging).astype(np.uint16),
-                                        frame_averaging),
-                                      frame_intervals)).T,
+
+        # implemented MM 24 Oct. 2019. Catches mismatching lengths for frame interval vectors
+        frame_intervals_repeat = np.repeat(np.arange(frame_intervals.shape[0]/frame_averaging).astype(np.uint16),
+                                           frame_averaging)
+        repeat_diff = len(frame_intervals_repeat) - len(frame_intervals)
+        if repeat_diff > 0:
+            frame_intervals_repeat = frame_intervals_repeat[:-1*repeat_diff]
+        elif repeat_diff < 0:
+            frame_intervals = frame_intervals[:-1*repeat_diff]
+
+        label_vec = pd.DataFrame(data=np.vstack((frame_intervals_repeat, frame_intervals)).T,
                                  columns=['label', 'times'])
         # calculate the edges of each frame in time
         edge_vector = np.hstack((0, np.cumsum(np.array(label_vec.groupby('label').sum()))))
@@ -326,14 +352,14 @@ for folders in folders_path:
         
         if gap_list.shape[0] > 0:
             while gap_list.shape[0] > 0:
-                nanc = gap_list[0]
+                nanc = int(gap_list[0][0])
                 # add an extra value in the index vector and the data vector
                 # [via interpolation]
                 idx_vec = np.hstack((idx_vec[:nanc], idx_vec[nanc-1]+1, idx_vec[nanc:]))
                 # generate the interpolated data point
                 interp_point = interp_trace(np.arange(1, 3), lvd_data[nanc-1:nanc+1, :], 1.5)
 
-                lvd_data = np.hstack((lvd_data[:nanc, :], interp_point, lvd_data[nanc:, :]))
+                lvd_data = np.vstack((lvd_data[:nanc, :], interp_point, lvd_data[nanc:, :]))
                 # refind the gaps
                 gap_list = np.argwhere(np.diff(idx_vec) > 1)+1
 
@@ -451,7 +477,7 @@ for folders in folders_path:
                 delta_cam1frame = np.diff(nan_idx_eye1vec) > 1
 
                 inner_nan1 = np.argwhere(delta_cam1frame[:last_nan1])+1
-                last_nan1 = last_nan1 + 1
+                # last_nan1 = last_nan1 + 1
 
         # find where the continuous NaNs begin at the end
         last_nan2 = np.argwhere(np.diff(np.isnan(nan_idx_eye2vec)))
@@ -479,7 +505,7 @@ for folders in folders_path:
                     inner_nan2 = np.argwhere(delta_cam2frame[99:-100])+100
                 else:
                     inner_nan2 = np.argwhere(delta_cam2frame[:last_nan2])+1
-                    last_nan2 = last_nan2 + 1
+                    # last_nan2 = last_nan2 + 1
 
         # Now NaN the extrema if they contain deltas larger than 1
         delta_cam1frame = np.diff(nan_idx_eye1vec) > 1
@@ -629,7 +655,9 @@ for folders in folders_path:
                         trial_cam[:, reps, stim, :] = np.nan
                     else:
                         # turn it into integer for indexing
-                        trial_start = trial_start.astype(np.uint16)
+                        trial_start = trial_start.astype(np.int16)        # Why is this sometimes negative?
+                        if trial_start < 0:
+                            trial_start = 0
                         # transfer the dRoR info
                         # load the trial in the matrix, including the r0 period
                         trial_mat[:, :trial_vec[trials], reps, stim] = \
